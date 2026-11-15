@@ -21,6 +21,7 @@ BOTONES = {
     for indice, nivel in enumerate(PROFUNDIDADES)
 }
 RUTA_SPRITES = Path(__file__).resolve().parents[1] / "assets" / "sprites"
+RUTA_ICONO = RUTA_SPRITES / "icono.png"
 
 
 def texto(pantalla, fuente, mensaje, y):
@@ -49,7 +50,7 @@ def dibujar_partida(pantalla, fuente, estado: Estado, nivel: str, piso, monedas,
             rect = pygame.Rect(columna * CASILLA, CABECERA + fila * CASILLA, CASILLA, CASILLA)
             pygame.draw.rect(pantalla, PISO[(fila + columna) % 2], rect)
             if piso is not None:
-                pantalla.blit(piso, rect)
+                pantalla.blit(piso, piso.get_rect(center=rect.center))
 
     if estado.turno == ROJO:
         for casilla in movimientos_legales(estado):
@@ -85,12 +86,31 @@ def main():
     pygame.display.init()
     pygame.font.init()
     try:
+        if RUTA_ICONO.is_file():
+            pygame.display.set_icon(pygame.image.load(str(RUTA_ICONO)))
         pantalla = pygame.display.set_mode((ANCHO, ALTO))
         pygame.display.set_caption("Yoshi's Battle")
-        titulo = pygame.font.Font(None, 52)
         fuente = pygame.font.Font(None, 25)
         reloj = pygame.time.Clock()
-        piso = cargar_png(RUTA_SPRITES / "piso.png", CASILLA, baldosa=True)
+        piso = cargar_png(RUTA_SPRITES / "piso.png", CASILLA)
+        titulo = cargar_png(RUTA_SPRITES / "titulo.png", 320)
+        fuente_titulo = pygame.font.Font(None, 52)
+        fondo_menu = pantalla.copy()
+        fondo_menu.fill(FONDO)
+        textura_boton = None
+        if piso is not None:
+            for y in range(0, ALTO, piso.get_height()):
+                for x in range(0, ANCHO, piso.get_width()):
+                    fondo_menu.blit(piso, (x, y))
+            sombra = pygame.Surface((ANCHO, ALTO), pygame.SRCALPHA)
+            sombra.fill((*FONDO, 170))
+            fondo_menu.blit(sombra, (0, 0))
+
+            medidas = next(iter(BOTONES.values())).size
+            textura_boton = pygame.transform.smoothscale(piso, medidas)
+            sombra = pygame.Surface(medidas, pygame.SRCALPHA)
+            sombra.fill((*FONDO, 155))
+            textura_boton.blit(sombra, (0, 0))
         monedas = {
             1: cargar_gif(RUTA_SPRITES / "moneda.gif", 30),
             3: cargar_gif(RUTA_SPRITES / "monedaroja.gif", 30),
@@ -136,13 +156,22 @@ def main():
                         estado = jugar(estado, destino)
 
             if estado is None:
-                pantalla.fill(FONDO)
-                texto(pantalla, titulo, "Yoshi's Battle", 145)
+                pantalla.blit(fondo_menu, (0, 0))
+                if titulo is None:
+                    texto(pantalla, fuente_titulo, "Yoshi's Battle", 112)
+                else:
+                    pantalla.blit(titulo, titulo.get_rect(center=(ANCHO // 2, 112)))
                 texto(pantalla, fuente, "Elige la dificultad", 209)
                 mouse = pygame.mouse.get_pos()
                 for numero, (nombre, rect) in enumerate(BOTONES.items(), start=1):
-                    color = (52, 105, 79) if rect.collidepoint(mouse) else (40, 72, 58)
-                    pygame.draw.rect(pantalla, color, rect, border_radius=8)
+                    activo = rect.collidepoint(mouse)
+                    if textura_boton is None:
+                        color = (52, 105, 79) if activo else (40, 72, 58)
+                        pygame.draw.rect(pantalla, color, rect)
+                    else:
+                        pantalla.blit(textura_boton, rect)
+                    borde = TEXTO if activo else (156, 171, 147)
+                    pygame.draw.rect(pantalla, borde, rect, width=2)
                     texto(pantalla, fuente, f"{numero}  {nombre.capitalize()}", rect.centery)
             else:
                 dibujar_partida(pantalla, fuente, estado, nivel, piso, monedas, yoshis, direcciones)

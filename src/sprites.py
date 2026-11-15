@@ -32,15 +32,15 @@ def _escalar(imagen: pygame.Surface, tamano: int) -> pygame.Surface:
     ancho, alto = imagen.get_size()
     factor = tamano / max(ancho, alto)
     medidas = max(1, round(ancho * factor)), max(1, round(alto * factor))
+    if factor < 1:
+        return pygame.transform.smoothscale(imagen, medidas)
     return pygame.transform.scale(imagen, medidas)
 
 
-def cargar_png(ruta: Path, tamano: int, *, baldosa: bool = False) -> pygame.Surface | None:
+def cargar_png(ruta: Path, tamano: int) -> pygame.Surface | None:
     if not ruta.is_file():
         return None
     imagen = pygame.image.load(str(ruta)).convert_alpha()
-    if baldosa:
-        return pygame.transform.scale(imagen, (tamano, tamano))
     return _escalar(imagen, tamano)
 
 
