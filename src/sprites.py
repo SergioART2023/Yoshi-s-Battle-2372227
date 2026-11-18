@@ -31,9 +31,9 @@ def direccion_salto(origen: Posicion, destino: Posicion) -> str:
 def _escalar(imagen: pygame.Surface, tamano: int) -> pygame.Surface:
     ancho, alto = imagen.get_size()
     factor = tamano / max(ancho, alto)
+    if factor >= 1:
+        factor = int(factor)
     medidas = max(1, round(ancho * factor)), max(1, round(alto * factor))
-    if factor < 1:
-        return pygame.transform.smoothscale(imagen, medidas)
     return pygame.transform.scale(imagen, medidas)
 
 

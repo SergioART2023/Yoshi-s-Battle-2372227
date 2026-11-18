@@ -6,13 +6,14 @@ from .juego import LADO, ROJO, VERDE, Estado, Posicion, jugar, movimientos_legal
 from .minimax import PROFUNDIDADES, elegir_movimiento
 from .sprites import DIRECCIONES, cargar_gif, cargar_png, direccion_salto
 
-CASILLA = 56
+CASILLA = 74
 ANCHO = LADO * CASILLA
 CABECERA = 72
 ALTO = CABECERA + ANCHO + 42
-FONDO = (23, 34, 31)
-TEXTO = (248, 244, 226)
-PISO = ((236, 218, 176), (205, 180, 134))
+ALTO_MENU = 430
+BORDE = (202, 73, 84)
+FONDO = (248, 203, 161)
+TEXTO = (0, 0, 0)
 COLORES = ((34, 121, 71), (164, 48, 53))
 NOMBRES = ("Verde", "Rojo")
 TECLAS = dict(zip((pygame.K_1, pygame.K_2, pygame.K_3), PROFUNDIDADES))
@@ -22,6 +23,7 @@ BOTONES = {
 }
 RUTA_SPRITES = Path(__file__).resolve().parents[1] / "assets" / "sprites"
 RUTA_ICONO = RUTA_SPRITES / "icono.png"
+RUTA_FUENTE = RUTA_SPRITES.parent / "fonts" / "Mario64.ttf"
 
 
 def texto(pantalla, fuente, mensaje, y):
@@ -34,26 +36,37 @@ def centro(posicion: Posicion) -> tuple[int, int]:
     return columna * CASILLA + CASILLA // 2, CABECERA + fila * CASILLA + CASILLA // 2
 
 
-def dibujar_partida(pantalla, fuente, estado: Estado, nivel: str, piso, monedas, yoshis, direcciones):
+def dibujar_partida(pantalla, fuente, estado: Estado, nivel: str, piso, monedas, yoshis, direcciones, ataque, fondo_marcador, fondo_inferior, fuente_ganador, fondo_ganador):
     pantalla.fill(FONDO)
-    texto(pantalla, fuente, f"Verde {estado.puntos[VERDE]}     Rojo {estado.puntos[ROJO]}", 20)
+    for jugador in (VERDE, ROJO):
+        rect = pygame.Rect(0, 4, 260, 32)
+        rect.centerx = jugador * (ANCHO // 2) + ANCHO // 4
+        if fondo_marcador is not None:
+            pantalla.blit(fondo_marcador, rect)
+        imagen = fuente.render(
+            f"Yoshi {NOMBRES[jugador]} - {estado.puntos[jugador]}", True, COLORES[jugador]
+        )
+        pantalla.blit(imagen, imagen.get_rect(center=rect.center))
     if estado.terminado:
-        mensaje = f"Gana el Yoshi {NOMBRES[estado.ganador].lower()}"
+        mensaje = "Partida terminada"
     elif estado.turno == VERDE:
-        mensaje = "Turno de la máquina"
+        mensaje = "Turno de la maquina"
     else:
-        mensaje = "Tu turno · Haz clic en una casilla marcada"
+        mensaje = "Tu turno - Haz clic en una casilla marcada"
     texto(pantalla, fuente, mensaje, 49)
 
     for fila in range(LADO):
         for columna in range(LADO):
             rect = pygame.Rect(columna * CASILLA, CABECERA + fila * CASILLA, CASILLA, CASILLA)
-            pygame.draw.rect(pantalla, PISO[(fila + columna) % 2], rect)
+            pygame.draw.rect(pantalla, FONDO, rect)
             if piso is not None:
                 pantalla.blit(piso, piso.get_rect(center=rect.center))
 
     if estado.turno == ROJO:
         for casilla in movimientos_legales(estado):
+            if ataque is not None:
+                pantalla.blit(ataque, ataque.get_rect(center=centro(casilla)))
+                continue
             x, y = centro(casilla)
             rect = pygame.Rect(x - 24, y - 24, 48, 48)
             pygame.draw.rect(pantalla, COLORES[ROJO], rect, width=3, border_radius=6)
@@ -79,7 +92,34 @@ def dibujar_partida(pantalla, fuente, estado: Estado, nivel: str, piso, monedas,
         imagen = fuente.render(NOMBRES[jugador][0], True, TEXTO)
         pantalla.blit(imagen, imagen.get_rect(center=centro(casilla)))
 
-    texto(pantalla, fuente, f"{nivel.capitalize()} · Esc para volver al menú", ALTO - 21)
+    if fondo_inferior is not None:
+        pantalla.blit(fondo_inferior, (0, CABECERA + ANCHO + 4))
+    pygame.draw.rect(pantalla, BORDE, (0, CABECERA - 4, ANCHO, 4))
+    pygame.draw.rect(pantalla, BORDE, (0, CABECERA + ANCHO, ANCHO, 4))
+    texto(pantalla, fuente, f"{nivel.capitalize()} - Presiona ESC para volver al menu", ALTO - 21)
+    if estado.terminado:
+        centro_cartel = (ANCHO // 2, CABECERA + ANCHO // 2)
+        rect = pygame.Rect(0, 0, ANCHO - 48, 100)
+        rect.center = centro_cartel
+        if fondo_ganador is None:
+            pygame.draw.rect(pantalla, FONDO, rect)
+        else:
+            pantalla.blit(fondo_ganador, rect)
+        imagen = fuente_ganador.render(
+            f"Gana Yoshi {NOMBRES[estado.ganador]}", True, COLORES[estado.ganador]
+        )
+        rect_texto = imagen.get_rect(center=centro_cartel)
+        pantalla.blit(imagen, rect_texto)
+        izquierdo = yoshis[estado.ganador, "left"]
+        derecho = yoshis[estado.ganador, "right"]
+        if izquierdo is not None:
+            pantalla.blit(
+                izquierdo, izquierdo.get_rect(midright=(rect_texto.left - 8, rect.centery))
+            )
+        if derecho is not None:
+            pantalla.blit(
+                derecho, derecho.get_rect(midleft=(rect_texto.right + 8, rect.centery))
+            )
 
 
 def main():
@@ -88,43 +128,58 @@ def main():
     try:
         if RUTA_ICONO.is_file():
             pygame.display.set_icon(pygame.image.load(str(RUTA_ICONO)))
-        pantalla = pygame.display.set_mode((ANCHO, ALTO))
+        pantalla = pygame.display.set_mode((ANCHO, ALTO_MENU))
         pygame.display.set_caption("Yoshi's Battle")
-        fuente = pygame.font.Font(None, 25)
+        ruta_fuente = str(RUTA_FUENTE) if RUTA_FUENTE.is_file() else None
+        fuente = pygame.font.Font(ruta_fuente, 16)
+        fuente_botones = pygame.font.Font(ruta_fuente, 20)
+        fuente_ganador = pygame.font.Font(ruta_fuente, 36)
         reloj = pygame.time.Clock()
         piso = cargar_png(RUTA_SPRITES / "piso.png", CASILLA)
+        ataque = cargar_png(RUTA_SPRITES / "ataque.png", CASILLA)
         titulo = cargar_png(RUTA_SPRITES / "titulo.png", 320)
-        fuente_titulo = pygame.font.Font(None, 52)
+        fuente_titulo = pygame.font.Font(ruta_fuente, 36)
         fondo_menu = pantalla.copy()
         fondo_menu.fill(FONDO)
-        textura_boton = None
+        textura_boton = cargar_png(RUTA_SPRITES / "boton.png", 260)
+        fondo_marcador = cargar_png(RUTA_SPRITES / "marcador.png", 260)
+        fondo_inferior = None
+        fondo_ganador = None
+        if textura_boton is not None:
+            if fondo_marcador is None:
+                fondo_marcador = pygame.transform.scale(textura_boton, (260, 32))
+            fondo_inferior = pygame.transform.scale(textura_boton, (ANCHO, 38))
+            fondo_ganador = pygame.transform.scale(textura_boton, (ANCHO - 48, 100))
         if piso is not None:
-            for y in range(0, ALTO, piso.get_height()):
+            for y in range(0, ALTO_MENU, piso.get_height()):
                 for x in range(0, ANCHO, piso.get_width()):
                     fondo_menu.blit(piso, (x, y))
-            sombra = pygame.Surface((ANCHO, ALTO), pygame.SRCALPHA)
-            sombra.fill((*FONDO, 170))
-            fondo_menu.blit(sombra, (0, 0))
+        fondo_personalizado = cargar_png(RUTA_SPRITES / "fondocompleto.png", ANCHO)
+        if fondo_personalizado is not None:
+            fondo_menu.blit(
+                fondo_personalizado,
+                fondo_personalizado.get_rect(center=(ANCHO // 2, ALTO_MENU // 2)),
+            )
 
-            medidas = next(iter(BOTONES.values())).size
-            textura_boton = pygame.transform.smoothscale(piso, medidas)
-            sombra = pygame.Surface(medidas, pygame.SRCALPHA)
-            sombra.fill((*FONDO, 155))
-            textura_boton.blit(sombra, (0, 0))
         monedas = {
-            1: cargar_gif(RUTA_SPRITES / "moneda.gif", 30),
-            3: cargar_gif(RUTA_SPRITES / "monedaroja.gif", 30),
+            1: cargar_gif(RUTA_SPRITES / "moneda.gif", 64),
+            3: cargar_gif(RUTA_SPRITES / "monedaroja.gif", 64),
         }
         yoshis = {
             (jugador, direccion): cargar_png(
-                RUTA_SPRITES / f"yoshi{nombre.lower()}{direccion}.png", 48
+                RUTA_SPRITES / f"yoshi{nombre.lower()}{direccion}.png", CASILLA
             )
             for jugador, nombre in enumerate(NOMBRES)
             for direccion in DIRECCIONES
         }
+        yoshis_menu = (
+            cargar_png(RUTA_SPRITES / "yoshiverdedown.png", 111),
+            cargar_png(RUTA_SPRITES / "yoshirojodown.png", 111),
+        )
         direcciones = ["down", "down"]
         estado = None
         nivel = None
+        inicio_verde_ms = 0
 
         while True:
             for evento in pygame.event.get():
@@ -135,6 +190,7 @@ def main():
                         if estado is None:
                             return
                         estado = None
+                        pantalla = pygame.display.set_mode((ANCHO, ALTO_MENU))
                 if estado is None:
                     seleccion = None
                     if evento.type == pygame.KEYDOWN:
@@ -147,6 +203,8 @@ def main():
                     if seleccion is not None:
                         nivel = seleccion
                         estado = nueva_partida()
+                        pantalla = pygame.display.set_mode((ANCHO, ALTO))
+                        inicio_verde_ms = pygame.time.get_ticks() + 2000
                         direcciones = ["down", "down"]
                 elif evento.type == pygame.MOUSEBUTTONDOWN and evento.button == 1 and estado.turno == ROJO:
                     x, y = evento.pos
@@ -161,23 +219,29 @@ def main():
                     texto(pantalla, fuente_titulo, "Yoshi's Battle", 112)
                 else:
                     pantalla.blit(titulo, titulo.get_rect(center=(ANCHO // 2, 112)))
-                texto(pantalla, fuente, "Elige la dificultad", 209)
-                mouse = pygame.mouse.get_pos()
+                texto(pantalla, fuente, "Elige la dificultad", 224)
+                for imagen, x in zip(yoshis_menu, (ANCHO // 2 - 204, ANCHO // 2 + 204)):
+                    if imagen is not None:
+                        pantalla.blit(imagen, imagen.get_rect(center=(x, 322)))
                 for numero, (nombre, rect) in enumerate(BOTONES.items(), start=1):
-                    activo = rect.collidepoint(mouse)
                     if textura_boton is None:
-                        color = (52, 105, 79) if activo else (40, 72, 58)
-                        pygame.draw.rect(pantalla, color, rect)
+                        pygame.draw.rect(pantalla, FONDO, rect)
                     else:
-                        pantalla.blit(textura_boton, rect)
-                    borde = TEXTO if activo else (156, 171, 147)
-                    pygame.draw.rect(pantalla, borde, rect, width=2)
-                    texto(pantalla, fuente, f"{numero}  {nombre.capitalize()}", rect.centery)
+                        pantalla.blit(textura_boton, textura_boton.get_rect(center=rect.center))
+                    texto(pantalla, fuente_botones, f"{numero} - {nombre.capitalize()}", rect.centery)
             else:
-                dibujar_partida(pantalla, fuente, estado, nivel, piso, monedas, yoshis, direcciones)
+                dibujar_partida(
+                    pantalla, fuente, estado, nivel, piso, monedas, yoshis, direcciones,
+                    ataque, fondo_marcador, fondo_inferior, fuente_ganador, fondo_ganador,
+                )
             pygame.display.flip()
 
-            if estado is not None and estado.turno == VERDE and not estado.terminado:
+            if (
+                estado is not None
+                and estado.turno == VERDE
+                and not estado.terminado
+                and pygame.time.get_ticks() >= inicio_verde_ms
+            ):
                 destino = elegir_movimiento(estado, nivel)
                 direcciones[VERDE] = direccion_salto(estado.yoshis[VERDE], destino)
                 estado = jugar(estado, destino)
